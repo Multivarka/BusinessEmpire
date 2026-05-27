@@ -1,0 +1,6 @@
+fastapi
+backend
+uvicorn
+sqlalchemy
+pyjwt
+hashlib
