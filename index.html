@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Бизнес Империя</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-gray-900 text-white font-sans select-none">
+
+    <div class="max-w-md mx-auto h-screen flex flex-col justify-between p-4">
+
+        <div class="bg-gray-800 p-4 rounded-xl shadow-lg flex justify-between items-center">
+            <div>
+                <h1 id="user-name" class="text-xl font-bold text-yellow-400">Загрузка...</h1>
+                <p id="user-status" class="text-xs text-gray-400">Статус: Свободен</p>
+            </div>
+            <div class="text-right">
+                <span class="text-xs text-gray-400 block">Баланс</span>
+                <span id="user-balance" class="text-2xl font-black text-green-400">0 🪙</span>
+            </div>
+        </div>
+
+        <div class="flex-grow my-4 overflow-y-auto">
+
+            <div id="tab-company" class="space-y-4">
+                <div class="bg-gray-800 p-6 rounded-xl shadow-lg text-center">
+                    <h2 id="company-title" class="text-lg font-bold mb-2">У вас нет компании</h2>
+                    <p class="text-sm text-gray-400 mb-4">Приглашайте друзей, чтобы они работали на вас, или выкупите свободу!</p>
+
+                    <button id="btn-collect" onclick="collectIncome()" class="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-3 px-4 rounded-xl transition shadow-lg hidden">
+                        Собрать прибыль
+                    </button>
+                </div>
+
+                <div class="bg-gray-800 p-4 rounded-xl shadow-lg">
+                    <h3 class="font-bold text-sm mb-2 text-gray-400">Ваша реферальная ссылка:</h3>
+                    <button onclick="shareInvite()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition text-sm">
+                        🔗 Пригласить сотрудника / партнера
+                    </button>
+                </div>
+            </div>
+
+            <div id="tab-job" class="space-y-4 hidden">
+                <div class="bg-gray-800 p-6 rounded-xl shadow-lg text-center">
+                    <h2 class="text-lg font-bold mb-2">Ваше место работы</h2>
+                    <p id="boss-info" class="text-sm text-gray-400 mb-6">Вы работаете на: Свободный человек</p>
+
+                    <button id="btn-buyout" onclick="buyoutFreedom()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg">
+                        Выкупить свободу (500 🪙)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-800 p-2 rounded-xl shadow-lg flex justify-around">
+            <button onclick="switchTab('company')" class="flex flex-col items-center text-yellow-400 font-bold p-2">
+                <span>🏢</span>
+                <span class="text-xs">Компания</span>
+            </button>
+            <button onclick="switchTab('job')" class="flex flex-col items-center text-gray-400 hover:text-white p-2">
+                <span>🔨</span>
+                <span class="text-xs">Работа</span>
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // Инициализируем Telegram Web App
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Разворачиваем приложение на весь экран телефона
+
+        const BACKEND_URL = "http://127.0.0.1:8000";
+
+        // Получаем initData от Телеграма.
+        // Если тестируем в обычном браузере — подставляем тестовую строку, чтобы не падало.
+        const initData = tg.initData || "query_id=AAHXXXXX&auth_date=1716666666&user=%7B%22id%22%3A11111%2C%22first_name%22%3A%22%D0%98%D0%B2%D0%B0%D0%BD%22%7D&hash=fake_hash";
+
+        // Функция авторизации при старте приложения
+        async function authenticate() {
+            try {
+                // Извлекаем referrer_id из ссылки (Telegram передает его в tg.initDataUnsafe)
+                let urlParams = "";
+                if (tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
+                    // start_param будет равен например "ref_123456" -> вытаскиваем цифры
+                    const refId = tg.initDataUnsafe.start_param.replace('ref_', '');
+                    urlParams = `?referrer_id=${refId}`;
+                }
+
+                const response = await fetch(`${BACKEND_URL}/api/auth${urlParams}`, {
+                    method: "POST",
+                    headers: {
+                        "X-Telegram-Init-Data": initData
+                    }
+                });
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    updateUI(data.user);
+                } else {
+                    alert("Ошибка авторизации");
+                }
+            } catch (err) {
+                console.error(err);
+                // Если бэкенд не запущен, покажем заглушку для теста верстки
+                document.getElementById("user-name").innerText = "Тест Интерфейса";
+            }
+        }
+
+        // Обновление элементов интерфейса данными с бэкенда
+        function updateUI(user) {
+            document.getElementById("user-name").innerText = user.first_name;
+            document.getElementById("user-balance").innerText = `${user.balance} 🪙`;
+            document.getElementById("boss-info").innerText = `Вы работаете на: ${user.boss}`;
+            document.getElementById("user-status").innerText = user.has_company ? "Статус: Владелец бизнеса" : `Статус: Раб у ${user.boss}`;
+
+            if (user.has_company) {
+                document.getElementById("company-title").innerText = user.company_name;
+                document.getElementById("btn-collect").classList.remove("hidden");
+                document.getElementById("btn-buyout").classList.add("hidden"); // Босс не может выкупаться
+            } else {
+                document.getElementById("company-title").innerText = "У вас нет компании";
+                document.getElementById("btn-collect").classList.add("hidden");
+                document.getElementById("btn-buyout").classList.remove("hidden");
+            }
+        }
+
+        // Сбор пассивной прибыли
+        async function collectIncome() {
+            const response = await fetch(`${BACKEND_URL}/api/company/collect`, {
+                method: "POST",
+                headers: { "X-Telegram-Init-Data": initData }
+            });
+            const data = await response.json();
+            if (data.status === "success") {
+                alert(`Вы собрали ${data.earned} 🪙 прибыли!`);
+                authenticate(); // Перезапрашиваем баланс
+            } else {
+                alert(data.message);
+            }
+        }
+
+        // Выкупить свободу
+        async function buyoutFreedom() {
+            const response = await fetch(`${BACKEND_URL}/api/worker/buyout`, {
+                method: "POST",
+                headers: { "X-Telegram-Init-Data": initData }
+            });
+            const data = await response.json();
+            if (data.status === "success") {
+                alert(data.message);
+                authenticate();
+            } else {
+                alert(data.message);
+            }
+        }
+
+        // Поделиться реферальной ссылкой
+        function shareInvite() {
+            // В реальном TWA тут должен быть ID текущего юзера.
+            // Для теста используем статический ID 11111
+            const myId = tg.initDataUnsafe?.user?.id || 11111;
+            const botUsername = "твой_юзернейм_бота"; // Замени на имя своего бота из BotFather без знака @
+            const inviteLink = `https://t.me/${botUsername}?start=ref_${myId}`;
+
+            // Открываем нативное окно шеринга Telegram
+            tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent("text: "Стань сотрудником в моей компании «Бизнес Империя»! Построим корпорацию вместе!"")}`);
+        }
+
+        // Переключение вкладок меню
+        function switchTab(tab) {
+            if (tab === 'company') {
+                document.getElementById("tab-company").classList.remove("hidden");
+                document.getElementById("tab-job").classList.add("hidden");
+            } else {
+                document.getElementById("tab-company").classList.add("hidden");
+                document.getElementById("tab-job").classList.remove("hidden");
+            }
+        }
+
+        // Запуск авторизации при загрузке страницы
+        authenticate();
+    </script>
+</body>
+</html>
